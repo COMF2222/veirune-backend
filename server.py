@@ -11,6 +11,7 @@ import secrets
 import signal
 import sqlite3
 import personal
+import community
 import chat
 import operations
 import backup
@@ -135,6 +136,7 @@ def database():
     connection.execute("CREATE TABLE IF NOT EXISTS daily_stream_usage (day TEXT NOT NULL,user_id INTEGER NOT NULL,requests INTEGER NOT NULL,PRIMARY KEY(day,user_id))")
     chat.initialize(connection)
     personal.initialize(connection)
+    community.initialize(connection)
     operations.initialize(connection)
     connection.commit()
     try:
@@ -318,10 +320,11 @@ def admin_users():
                           "FROM users u LEFT JOIN user_activity a ON a.user_id=u.id "
                           "LEFT JOIN daily_stream_usage d ON d.user_id=u.id AND d.day=? "
                           "ORDER BY COALESCE(a.last_seen,0) DESC,u.updated_at DESC", (day,)).fetchall()
+        editors = {row[0] for row in db.execute("SELECT user_id FROM community_editors")}
     users = []
     for row in rows:
         user = dict(zip(("id", "username", "status", "updated_at", "last_seen", "stream_requests_today"), row))
-        user.update(online=user["status"] == "approved" and now - ONLINE_SECONDS <= user["last_seen"] <= now,
+        user.update(editor=user["id"] in editors, online=user["status"] == "approved" and now - ONLINE_SECONDS <= user["last_seen"] <= now,
                     usage_day=day)
         users.append(user)
     return users
@@ -671,6 +674,57 @@ class Handler(BaseHTTPRequestHandler):
                 user_id, _ = RELAY.identity(self.headers.get("Authorization", ""))
                 touch_activity(user_id)
                 return self.reply(200, {"user_id": user_id, "admin": user_id == admin_id()})
+            if path in ("/v1/community/home", "/v1/community/role") and self.command == "GET":
+                user_id, token = RELAY.identity(self.headers.get("Authorization", ""))
+                owner = admin_id()
+                with DB_LOCK, database() as db:
+                    if path.endswith("/role"):
+                        return self.reply(200, community.role(db, user_id, owner))
+                    data = community.snapshot(db, user_id, owner)
+                    ids = {row["trackId"] for key in ("today", "yesterday", "week", "editorial") for row in data[key]}
+                    tracks = community.cached(db, ids)
+                missing = sorted(ids - tracks.keys())
+                if missing:
+                    try:
+                        query = urllib.parse.urlencode({"urns": ",".join(f"soundcloud:tracks:{tid}" for tid in missing), "limit": 50})
+                        raw = soundcloud_request("https://api.soundcloud.com/tracks?" + query, token=token, timeout=6)
+                        rows = raw if isinstance(raw, list) else raw.get("collection", []) if isinstance(raw, dict) else []
+                        with DB_LOCK, database() as db:
+                            for row in rows:
+                                try:
+                                    if community.public_track(row)["id"] in missing:
+                                        track = community.save_track(db, row)
+                                        tracks[track["id"]] = track
+                                except ValueError:
+                                    pass
+                    except (UpstreamError, ValueError, OSError):
+                        pass
+                return self.reply(200, community.present(data, tracks))
+            if path == "/v1/community/picks" and self.command == "POST":
+                user_id, token = RELAY.identity(self.headers.get("Authorization", ""))
+                owner = admin_id()
+                body = self.body()
+                tid = community.track_id(body.get("trackId"))
+                active = body.get("active")
+                if type(active) is not bool: raise ValueError("Invalid pick")
+                with DB_LOCK, database() as db:
+                    if not community.can_edit(db, user_id, owner): raise PermissionError("Editor role required")
+                raw = soundcloud_request(f"https://api.soundcloud.com/tracks/soundcloud%3Atracks%3A{tid}", token=token, timeout=8) if active else None
+                with DB_LOCK, database() as db:
+                    if raw is not None:
+                        if community.public_track(raw)["id"] != tid: raise ValueError("Track mismatch")
+                        community.save_track(db, raw)
+                    community.pick(db, user_id, owner, tid, active)
+                    result = community.role(db, user_id, owner)
+                return self.reply(200, result)
+            if path.startswith("/v1/admin/editors/") and self.command == "POST":
+                self.admin()
+                user_id = int(path.removeprefix("/v1/admin/editors/"))
+                owner = admin_id()
+                enabled = self.body().get("editor")
+                with DB_LOCK, database() as db:
+                    community.set_editor(db, user_id, enabled, owner)
+                return self.reply(200, {"ok": True})
             if path == "/v1/leaderboard" and self.command == "GET":
                 user_id, _ = RELAY.identity(self.headers.get("Authorization", ""))
                 query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
@@ -682,7 +736,7 @@ class Handler(BaseHTTPRequestHandler):
                 user_id, _ = RELAY.identity(self.headers.get("Authorization", ""))
                 body = self.body(personal.MAX_BODY) if self.command == "POST" else None
                 with DB_LOCK, database() as db:
-                    version = 2 if self.headers.get("X-Fastcloud-Preferences") == "2" else 1
+                    version = {"2": 2, "3": 3}.get(self.headers.get("X-Fastcloud-Preferences"), 1)
                     data = personal.write(db, user_id, body, version) if body is not None else personal.read(db, user_id, version)
                 return self.reply(200, data)
             if self.command == "POST" and path == "/v1/oauth/exchange":

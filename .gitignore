@@ -3,4 +3,5 @@ vpn/
 *.sqlite3*
 __pycache__/
 .pytest_cache/
+.qa/
 lyrics-worker/target/

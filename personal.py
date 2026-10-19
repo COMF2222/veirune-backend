@@ -9,7 +9,7 @@ from datetime import date, datetime, timezone
 MAX_BODY = 2 * 1024 * 1024
 EXTENDED_PREFERENCES = {"wave_mode", "wave_mood", "leaderboard_anonymous"}
 PREFERENCE_FIELDS = {
-    "wave_mode", "wave_mood", "leaderboard_anonymous",
+    "wave_mode", "wave_mood", "leaderboard_anonymous", "show_community",
     "theme", "language", "music_taste", "theme_presets", "quick_access", "accent_rgb",
     "panel_rgb", "panel_opacity", "panel_blur", "heading_opacity", "text_rgb", "muted_text_rgb",
     "interface_text_scale", "interface_scale", "background_opacity", "background_dim",
@@ -39,7 +39,7 @@ def preference(key, value):
         if not isinstance(value, str) or value not in {"Balanced", "Familiar", "Discover", "Mood", "NoRepeats"}: raise ValueError("Invalid wave mode")
     elif key == "wave_mood":
         if not isinstance(value, str) or value not in {"Calm", "Sad", "Happy", "Workout", "Road"}: raise ValueError("Invalid wave mood")
-    elif key == "leaderboard_anonymous":
+    elif key in {"leaderboard_anonymous", "show_community"}:
         if type(value) is not bool: raise ValueError("Invalid anonymity setting")
     elif key.endswith("_rgb"):
         if value is None and key != "accent_rgb": return
@@ -155,6 +155,7 @@ def read(db, user_id, preference_version=1):
     result = {"preferences": {}, "folders": {}, "smartPlaylists": {}, "likedAt": {}, "trackFeedback": {}}
     for section, key, value in db.execute("SELECT section,key,value FROM personal_fields WHERE user_id=?", (user_id,)):
         if section == "preferences" and key in EXTENDED_PREFERENCES and preference_version < 2: continue
+        if section == "preferences" and key == "show_community" and preference_version < 3: continue
         result[section][key] = json.loads(value)
     # Daily totals for the chart; lifetime track totals remain independent of chart range.
     result["daily"] = [{"day": day, "ms": ms, "plays": plays} for day, ms, plays in db.execute("SELECT day,SUM(ms),SUM(plays) FROM listening WHERE user_id=? GROUP BY day ORDER BY day DESC LIMIT 365", (user_id,))]

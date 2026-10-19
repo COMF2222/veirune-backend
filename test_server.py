@@ -163,6 +163,33 @@ class BrokerTest(unittest.TestCase):
             denied=self.call('/v1/chat/activate',{"id":3},token="1")
             self.assertEqual(denied[0],400)
 
+    def test_editor_permissions_are_separate_from_owner_management(self):
+        import community
+        def identity(auth):
+            if auth == 'OAuth owner': return 1, 'owner'
+            if auth == 'OAuth editor': return 2, 'editor'
+            if auth == 'OAuth listener': return 3, 'listener'
+            from media import MediaError
+            raise MediaError(401, 'Sign in')
+        track={'id':10,'title':'Public song','sharing':'public','duration':180000}
+        with patch.object(server,'profile',side_effect=lambda token:(1,'Owner','owner') if token=='owner' else (2,'Editor','editor')),patch.object(server.RELAY,'identity',side_effect=identity),patch.object(server,'soundcloud_request',return_value=track):
+            server.allowed(1,'Owner','owner')
+            with server.DB_LOCK, server.database() as db:
+                db.executemany("INSERT INTO users VALUES(?,?,?,0)",[(2,'Editor','approved'),(3,'Listener','approved')])
+            self.assertEqual(self.call('/v1/admin/editors/2',{'editor':True},token='owner')[0],200)
+            self.assertEqual(self.call('/v1/admin/users',token='editor')[0],403)
+            self.assertEqual(self.call('/v1/admin/editors/3',{'editor':True},token='editor')[0],403)
+            status,role=self.call('/v1/community/role',token='editor')
+            self.assertEqual((status,role['canEdit'],role['isOwner']),(200,True,False))
+            self.assertEqual(self.call('/v1/community/picks',{'trackId':10,'active':True,'userId':1},token='listener')[0],403)
+            self.assertEqual(self.call('/v1/community/picks',{'trackId':10,'active':True,'userId':1},token='editor')[0],200)
+            data=self.call('/v1/community/home',token='listener')[1]
+            self.assertEqual(data['editorial'][0]['track']['title'],'Public song')
+            self.assertFalse(data['role']['canEdit'])
+            self.assertEqual(self.call('/v1/admin/editors/2',{'editor':False},token='owner')[0],200)
+            self.assertEqual(self.call('/v1/community/picks',{'trackId':10,'active':True},token='editor')[0],403)
+            self.assertEqual(self.call('/v1/community/home',token='listener')[1]['editorial'],[])
+
     def setUp(self):
         owner = patch.object(server, "ADMIN_SLUG", "owner")
         owner.start()
