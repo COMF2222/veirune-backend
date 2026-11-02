@@ -824,7 +824,11 @@ class Handler(BaseHTTPRequestHandler):
         except MediaError as error:
             return self.reply(error.status, {"error": str(error)})
         except UpstreamError as error:
-            return self.reply(401 if error.expired else 502, {"error": "SoundCloud session expired; sign in again" if error.expired else str(error)})
+            # A track denial is not a broker outage. Preserve quota responses
+            # too, so clients can wait instead of falling back and retrying.
+            upstream = getattr(error, "status", 502)
+            status = 401 if error.expired else upstream if upstream in (403, 404, 429) else 502
+            return self.reply(status, {"error": "SoundCloud session expired; sign in again" if error.expired else str(error)})
         except (ValueError, KeyError, TypeError, json.JSONDecodeError) as error:
             return self.reply(400, {"error": str(error)})
         except Exception:

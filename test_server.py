@@ -18,6 +18,15 @@ import server
 
 
 class BrokerTest(unittest.TestCase):
+    def test_media_resolution_preserves_track_denials_and_request_limits(self):
+        for upstream, expected in [(403,403),(404,404),(429,429),(503,502)]:
+            error = server.UpstreamError('SoundCloud request failed')
+            error.status = upstream
+            with patch.object(server, 'media_cache') as factory:
+                factory.return_value.resolve.side_effect = error
+                status, _ = self.call('/v1/media/resolve', {'urn':'soundcloud:tracks:7'}, token='fixture')
+                self.assertEqual(status, expected)
+
     def test_phone_handoff_uses_fresh_grant_and_keeps_tokens_out_of_public_checks(self):
         from pairing import Pairings
         def relay_profile(*_, **__):
