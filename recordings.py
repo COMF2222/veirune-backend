@@ -58,16 +58,25 @@ def preview(track):
             or str(track.get("policy", "")).upper() in ("SNIP", "PREVIEW"))
 
 
+def isrc(track):
+    value = metadata_of(track).get("isrc") or track.get("isrc")
+    return value.strip().casefold() if isinstance(value, str) else ""
+
+
 def score(source, candidate):
     if not playable(candidate): return None
     source_duration, candidate_duration = duration(source), duration(candidate)
-    if not source_duration or not candidate_duration or source_duration <= 30000: return None
-    if abs(source_duration - candidate_duration) > max(3000, min(8000, source_duration // 30)): return None
+    if not candidate_duration: return None
+    known_duration = source_duration is not None and source_duration > 30000
+    same_isrc = bool(isrc(source)) and isrc(source) == isrc(candidate)
+    if not known_duration:
+        # A preview can report only its 30 seconds. Require the recording's
+        # identifier in that case; title alone cannot prove the full duration.
+        if not preview(source) or not same_isrc or candidate_duration <= 30000: return None
+    elif abs(source_duration - candidate_duration) > max(3000, min(8000, source_duration // 30)): return None
     source_words, candidate_words = words(source.get("title")), words(candidate.get("title"))
     if VARIANTS.intersection(source_words.split()) != VARIANTS.intersection(candidate_words.split()): return None
-    source_isrc = metadata_of(source).get("isrc") or source.get("isrc")
-    candidate_isrc = metadata_of(candidate).get("isrc") or candidate.get("isrc")
-    if source_isrc and candidate_isrc and str(source_isrc).casefold() == str(candidate_isrc).casefold(): return 100
+    if same_isrc: return 100
     performer = words(artist(source))
     source_title = title(source.get("title"), performer)
     if not performer or not source_title or title(candidate.get("title"), performer) != source_title: return None
@@ -111,7 +120,7 @@ class RecordingMatches:
         if (source.get("sharing") != "public" or not preview(source)
                 or str(source.get("access", "")).casefold() in ("block", "blocked")
                 or str(source.get("policy", "")).upper() in ("BLOCK", "BLOCKED")
-                or not duration(source) or duration(source) <= 30000): return None
+                or (not duration(source) or duration(source) <= 30000) and not isrc(source)): return None
         fingerprint = hashlib.sha256(json.dumps([words(source.get("title")), words(artist(source)), duration(source), metadata_of(source)], sort_keys=True).encode()).hexdigest()
         with self.locks.hold("recording:" + source_urn):
             deadline = time.monotonic() + 12
@@ -124,7 +133,8 @@ class RecordingMatches:
             with self.missing_lock:
                 if self.missing.get(missing_key, 0) > time.monotonic(): return None
             source_title = source.get("title") or ""
-            queries = list(dict.fromkeys([f"{artist(source)} {source_title}".strip(), source_title]))
+            clean_title = title(source_title, artist(source))
+            queries = list(dict.fromkeys([f"{artist(source)} {clean_title}".strip(), source_title]))
             checked = set()
             for query in queries[:2]:
                 remaining = deadline - time.monotonic()

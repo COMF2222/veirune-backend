@@ -60,6 +60,25 @@ class RecordingTests(unittest.TestCase):
         self.assertEqual(score(self.source, self.target), 85)
         self.assertEqual(self.find()["id"], 8)
 
+    def test_search_uses_clean_title_without_duplicated_artist_or_production_credit(self):
+        self.source["title"] = "Artist - Song (prod. Producer)"
+        original = self.api
+        def api(url, **kwargs):
+            if "?" in url:
+                query = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)["q"][0]
+                if query.casefold() != "artist song": return {"collection": []}
+            return original(url, **kwargs)
+        self.service.api = api
+        self.assertEqual(self.find()["id"], 8)
+
+    def test_a_thirty_second_metadata_duration_can_find_a_full_recording_by_isrc(self):
+        self.source.pop("full_duration")
+        self.source["publisher_metadata"] = {"isrc":"abc123"}
+        self.target["publisher_metadata"] = {"isrc":"ABC123"}
+        self.assertEqual(self.find()["id"], 8)
+        self.target["publisher_metadata"]["isrc"] = "other-recording"
+        self.assertIsNone(self.find())
+
     def test_underscore_credits_and_empty_publisher_artist_are_normalized(self):
         self.source["publisher_metadata"] = {"artist": " "}
         self.assertEqual(score(self.source, recording(title="Artist_-_Song", user={"username": "Uploader"})), 85)
