@@ -229,6 +229,13 @@ class BrokerTest(unittest.TestCase):
         with server.RATE_LOCK:
             server.RATE.clear()
         self.temp = tempfile.TemporaryDirectory()
+        # Media routes initialize their cache even when web playback is mocked.
+        # Never use the container's /media path or reuse another test's cache.
+        self.enterContext(patch.dict(os.environ, {
+            "FASTCLOUD_MEDIA_CACHE_ROOT": str(Path(self.temp.name) / "media"),
+        }))
+        self.enterContext(patch.object(server, "MEDIA", None))
+        self.enterContext(patch.object(server, "WEB_PLAYBACK", None))
         server.DB_PATH = Path(self.temp.name) / "approvals.sqlite3"
         server.RELEASES = server.ReleaseNotifications()
         server.set_access_settings(True)
