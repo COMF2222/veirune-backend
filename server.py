@@ -26,6 +26,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from media import MediaCache, MediaError
+from web_playback import PublicWebPlayback
 from relay import Relay
 from contextlib import contextmanager
 from usage import audio_api_request
@@ -61,6 +62,8 @@ UPDATE_STREAMS = threading.BoundedSemaphore(256)
 UPDATE_HEARTBEAT_SECONDS = 20
 MEDIA = None
 MEDIA_LOCK = threading.Lock()
+WEB_PLAYBACK = None
+WEB_PLAYBACK_LOCK = threading.Lock()
 OPERATIONS = None
 OPERATIONS_LOCK = threading.Lock()
 REFRESHES = Flights(limit=64, cache_bytes=1024 * 1024)
@@ -114,6 +117,14 @@ def media_cache():
                 upstream_bytes=lambda count: operation_service().add_bytes("upstream", count),
                 recording_api=lambda url, token, timeout: soundcloud_request(url, token=token, timeout=timeout))
         return MEDIA
+
+
+def web_playback():
+    global WEB_PLAYBACK
+    with WEB_PLAYBACK_LOCK:
+        if WEB_PLAYBACK is None:
+            WEB_PLAYBACK = PublicWebPlayback(media_cache())
+        return WEB_PLAYBACK
 
 
 class UpstreamError(Exception):
@@ -511,6 +522,33 @@ class Handler(BaseHTTPRequestHandler):
     def media_request(self, path):
         cache = media_cache()
         with cache.admission():
+            if path == '/v1/media/web-resolve' and self.command == 'POST':
+                authorization = self.headers.get('Authorization','')
+                if not authorization.startswith('OAuth '): raise MediaError(401,'SoundCloud sign-in required')
+                payload = self.body()
+                return self.reply(200, web_playback().resolve(payload.get('urn'), authorization[6:],drm=payload.get('drm','widevine')))
+            web_match = re.fullmatch(r'/v1/media/web/([A-Za-z0-9_-]{43})/(index\.m3u8|asset/[0-9]{1,4}|license/(?:widevine|playready|fairplay)|started)',path)
+            if web_match:
+                ticket, name = web_match.groups()
+                is_license = name.startswith('license/')
+                if self.command not in ('GET','POST') or self.command == 'POST' and not is_license and name != 'started' or self.command == 'GET' and (name == 'started' or is_license and name != 'license/fairplay'):
+                    raise MediaError(405,'Unsupported playback method')
+                body = None
+                if self.command == 'POST':
+                    size = int(self.headers.get('Content-Length','0'))
+                    if not 0 < size <= 1024**2: raise MediaError(413,'Invalid CDM request size')
+                    body = self.rfile.read(size)
+                    if len(body) != size: raise MediaError(400,'Incomplete CDM request')
+                result = web_playback().resource(ticket,name,body=body)
+                self.send_response(result.status)
+                self.send_header('Content-Type',result.content_type)
+                self.send_header('Content-Length',str(len(result.data)))
+                self.send_header('Cache-Control','no-store')
+                self.send_header('X-Content-Type-Options','nosniff')
+                self.end_headers()
+                self.wfile.write(result.data)
+                if not is_license: cache.record_served(len(result.data))
+                return
             if path == "/v1/media/resolve" and self.command == "POST":
                 authorization = self.headers.get("Authorization", "")
                 if not authorization.startswith("OAuth "):

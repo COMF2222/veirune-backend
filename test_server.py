@@ -18,6 +18,27 @@ import server
 
 
 class BrokerTest(unittest.TestCase):
+    def test_web_resolution_requires_oauth_and_forwards_only_the_platform_choice(self):
+        with patch.object(server,'web_playback') as factory:
+            factory.return_value.resolve.return_value = {'duration_ms':127000}
+            self.assertEqual(self.call('/v1/media/web-resolve',{'urn':'soundcloud:tracks:7'})[0],401)
+            factory.assert_not_called()
+            status, result = self.call('/v1/media/web-resolve',{'urn':'soundcloud:tracks:7','drm':'fairplay'},token='fixture')
+            self.assertEqual((status,result),(200,{'duration_ms':127000}))
+            factory.return_value.resolve.assert_called_once_with('soundcloud:tracks:7','fixture',drm='fairplay')
+
+    def test_cdm_challenge_and_response_are_opaque_and_never_cached(self):
+        from web_playback import WebData
+        path='/v1/media/web/'+'a'*43+'/license/widevine'
+        with patch.object(server,'web_playback') as factory:
+            factory.return_value.resource.return_value = WebData(b'\x00\x81\xffCDM','application/octet-stream')
+            request=urllib.request.Request(self.base+path,data=b'\x00\xffchallenge',headers={'Content-Type':'application/octet-stream'})
+            with urllib.request.urlopen(request) as response:
+                self.assertEqual(response.read(),b'\x00\x81\xffCDM')
+                self.assertEqual(response.headers['Cache-Control'],'no-store')
+            factory.return_value.resource.assert_called_once_with('a'*43,'license/widevine',body=b'\x00\xffchallenge')
+            self.assertEqual(self.call(path)[0],405)
+
     def test_media_resolution_preserves_track_denials_and_request_limits(self):
         for upstream, expected in [(403,403),(404,404),(429,429),(503,502)]:
             error = server.UpstreamError('SoundCloud request failed')

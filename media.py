@@ -302,6 +302,28 @@ class MediaCache:
     def contains(self, key):
         return (self.objects / (key + ".seg")).is_file()
 
+    def register_web_manifest(self, value, user_id, urn, assets, version, bitrate):
+        """Register encrypted media only. CDM licenses never enter this cache."""
+        manifest_assets = []
+        for upstream in assets:
+            checked_upstream(upstream)
+            parsed = urllib.parse.urlsplit(upstream)
+            stable = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, '', ''))
+            key = hashlib.sha256(f'web|{urn}|{version}|{bitrate}|{stable}'.encode()).hexdigest()
+            manifest_assets.append({'url': upstream, 'key': key})
+        with self.state_lock:
+            now = time.monotonic()
+            self.tickets = {k:v for k,v in self.tickets.items() if v['expires'] > now}
+            if value not in self.tickets and len(self.tickets) >= 4096:
+                raise MediaError(503, 'Playback ticket capacity reached')
+            self.tickets[value] = {'expires': now+4*3600, 'user': user_id, 'urn': urn, 'token': None,
+                                   'manifest': {'assets': manifest_assets, 'lines': [], 'bitrate': bitrate}}
+        return [asset['key'] for asset in manifest_assets]
+
+    def web_segment(self, value, key):
+        # Renewal is owned by the web resolver, not the ordinary API resolver.
+        return self._segment(value, key)
+
     def prune(self, reserve=0):
         with self.state_lock:
             active = {urn for urn, expires in self.active_tracks.items() if expires > time.monotonic()}

@@ -7,7 +7,7 @@ RUN cargo build --release --locked
 
 FROM python:3.12-slim
 WORKDIR /app
-COPY server.py media.py recordings.py relay.py usage.py personal.py community.py chat.py operations.py concurrency.py upstream.py backup.py preflight.py mobile.py pairing.py mobile_updates.py /app/
+COPY server.py media.py web_playback.py recordings.py relay.py usage.py personal.py community.py chat.py operations.py concurrency.py upstream.py backup.py preflight.py mobile.py pairing.py mobile_updates.py /app/
 COPY --from=lyrics /build/target/release/fastcloud-lyrics-worker /app/fastcloud-lyrics-worker
 ENV PYTHONUNBUFFERED=1 FASTCLOUD_HOST=0.0.0.0
 RUN useradd --system --uid 10001 fastcloud && mkdir -p /data /media /backups && chown fastcloud /data /media /backups

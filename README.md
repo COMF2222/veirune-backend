@@ -256,6 +256,22 @@ per identity. Deploy this backend before distributing the supporting client.
 
 ## Mobile clients
 
+Desktop 0.4.30 and Android 0.1.11 also support licensed public web streams through
+`POST /v1/media/web-resolve` (`urn`, optional `drm=widevine|fairplay`). Deploy this
+backend before those clients. No new environment variable, account cookie,
+content key or database migration is required. Current approved OAuth identity
+and public official metadata are checked before resolution; only broker-local
+capabilities are returned. The device CDM handles protected playback. Licenses
+are relayed opaquely and never written to the audio cache.
+
+The existing cache budget/free-space policy covers the additional encrypted
+segments. A started event from actual playback triggers one bounded artist
+prefetch worker (four queued jobs, twenty minutes / at most one quarter of cache
+capacity up to 2 GiB per job). Artist profile identity, public preview status and access
+revocation are checked during paginated scans. Repeat listeners reuse encrypted
+segments but obtain their own CDM licenses. No decoded protected audio, license
+tokens or user OAuth credentials are persisted by this subsystem.
+
 Veirune Mobile uses the same identity, personal-data, music relay and chat APIs.
 New endpoints provide short-lived PC-assisted OAuth pairing, bounded Yandex import,
 and the desktop-compatible Rust lyrics matcher. Pairing requires desktop 0.4.15
