@@ -1,5 +1,6 @@
 """Create a checked SQLite/config bundle for an authenticated SSH pull."""
 import hashlib
+import argparse
 import json
 import os
 from pathlib import Path
@@ -25,6 +26,7 @@ def bundle(database, env, directory):
     target = directory / name
     manifest = {'schema':1,'created':int(datetime.now(timezone.utc).timestamp()),'counts':counts,
         'databaseSha256': hashlib.sha256(database.read_bytes()).hexdigest(),
+        'envSha256': hashlib.sha256(env.read_bytes()).hexdigest(),
         'contains':['approvals.sqlite3','.env']}
     fd = os.open(target,os.O_WRONLY | os.O_CREAT | os.O_EXCL,0o600)
     try:
@@ -41,8 +43,10 @@ def bundle(database, env, directory):
     return {'file':name,'bytes':target.stat().st_size,'sha256':hashlib.sha256(target.read_bytes()).hexdigest(),'counts':counts}
 
 def main():
+    parser=argparse.ArgumentParser();parser.add_argument('--offline',action='store_true');args=parser.parse_args()
     compose = ['docker','compose','-f','compose.ip.yaml']
-    result = subprocess.run(compose+['exec','-T','fastcloud','python','backup.py','create','--prune'],cwd=ROOT,check=True,capture_output=True,text=True)
+    command=['run','--rm','--no-deps','fastcloud'] if args.offline else ['exec','-T','fastcloud']
+    result = subprocess.run(compose+command+['python','backup.py','create','--prune'],cwd=ROOT,check=True,capture_output=True,text=True)
     report = json.loads(result.stdout)
     filename = report['file']
     if not re.fullmatch(r'fastcloud-\d{8}T\d{6}-\d{6}\.sqlite3',filename): raise ValueError('Invalid snapshot name')

@@ -9,7 +9,7 @@ Set-VeirunePrivateDirectory $runtime
 Copy-Item -LiteralPath "$PSScriptRoot\..\backup.py" -Destination (Join-Path $runtime 'backup.py') -Force
 $scripts = Join-Path $runtime 'tools'
 Set-VeirunePrivateDirectory $scripts
-foreach ($name in @('backup-common.ps1','backup-to-pc.ps1','restore-pc-backup.ps1','run-backup-hidden.vbs')) {Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $scripts $name) -Force}
+foreach ($name in @('backup-common.ps1','backup-to-pc.ps1','restore-pc-backup.ps1','run-backup-hidden.vbs','backup-target.py','service_endpoint.py','service-endpoint-public-key.txt')) {Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $scripts $name) -Force}
 if ($Server -notmatch '^[a-z_][a-z0-9_-]*@[a-z0-9][a-z0-9.-]+$' -or $Destination.Contains('"')) {throw 'Invalid scheduled task arguments'}
 $executable = (Get-Process -Id $PID).Path
 $argument = '//B //NoLogo "' + (Join-Path $scripts 'run-backup-hidden.vbs') + '" "' + $executable + '" "' + (Join-Path $scripts 'backup-to-pc.ps1') + '" "' + $Server + '" "' + [IO.Path]::GetFullPath($Destination) + '"'

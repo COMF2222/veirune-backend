@@ -1,5 +1,9 @@
 # Veirune backend
 
+Server recovery, signed endpoint cutover and verified PC backups:
+[migration runbook](MIGRATION.md). Desktop 0.4.31 and Android 0.1.12 can follow
+future verified server moves without reinstalling or clearing account grants.
+
 This backend keeps the SoundCloud client secret private, manages access and
 release notifications, and caches public playable HLS audio segments. The UI,
 decoding, equalizer and account tokens remain on each user's computer. SoundCloud

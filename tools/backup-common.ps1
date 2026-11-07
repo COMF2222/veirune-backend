@@ -49,6 +49,7 @@ function Expand-VeiruneBundle([byte[]]$Bytes, [string]$Directory) {
         $manifest = Get-Content -LiteralPath (Join-Path $Directory 'manifest.json') -Raw | ConvertFrom-Json
         $hash = (Get-FileHash -LiteralPath (Join-Path $Directory 'approvals.sqlite3') -Algorithm SHA256).Hash.ToLowerInvariant()
         if ($manifest.schema -ne 1 -or $hash -ne $manifest.databaseSha256) {throw 'Restored database hash mismatch'}
+        if ($manifest.envSha256 -and (Get-FileHash -LiteralPath (Join-Path $Directory '.env') -Algorithm SHA256).Hash.ToLowerInvariant() -ne $manifest.envSha256) {throw 'Restored configuration hash mismatch'}
         $manifest
     } finally {$archive.Dispose(); $stream.Dispose()}
 }

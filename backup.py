@@ -1,5 +1,6 @@
 """Consistent SQLite snapshots and restore validation; no credentials are copied."""
 import argparse
+import hashlib
 import json
 import os
 import sqlite3
@@ -81,12 +82,32 @@ def restore(source, target):
             copy.close(); original.close()
         if inspect(temporary) != counts:
             raise ValueError("Restored row counts do not match")
+        if content_signature(source) != content_signature(temporary):
+            raise ValueError("Restored schema or table contents do not match")
         os.chmod(temporary, 0o600)
         # Atomic publication with exclusive creation: never replace a live database.
         os.link(temporary, target)
     finally:
         Path(temporary).unlink(missing_ok=True)
     return counts
+
+
+def content_signature(path):
+    """Verify every persistent table, including chat, roles and account metadata."""
+    db=sqlite3.connect(Path(path).resolve().as_uri()+"?mode=ro",uri=True)
+    digest=hashlib.sha256()
+    try:
+        for row in db.execute("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name"):
+            digest.update(repr(row).encode('utf-8'))
+        tables=db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").fetchall()
+        for (name,) in tables:
+            quoted='"'+name.replace('"','""')+'"'
+            columns=len(db.execute('PRAGMA table_info('+quoted+')').fetchall())
+            digest.update(name.encode('utf-8'))
+            for row in db.execute('SELECT * FROM '+quoted+' ORDER BY '+','.join(str(index+1) for index in range(columns))):
+                digest.update(repr(row).encode('utf-8'));digest.update(b'\n')
+        return digest.hexdigest()
+    finally:db.close()
 
 
 def worker(operations, stop):

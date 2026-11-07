@@ -31,7 +31,7 @@ with zipfile.ZipFile(root/'malformed.zip','w') as z:
     function global:ssh {$global:LASTEXITCODE = 0; $global:VeiruneBackupFixtureReport}
     function global:scp {Copy-Item -LiteralPath $global:VeiruneBackupFixtureArchive -Destination $args[-1]; $global:LASTEXITCODE = 0}
     $destination = Join-Path $temporary 'offsite'
-    & "$PSScriptRoot\backup-to-pc.ps1" -Destination $destination
+    & "$PSScriptRoot\backup-to-pc.ps1" -Destination $destination -Offline
     $copy = @(Get-ChildItem -LiteralPath $destination -Filter '*.vbackup')
     if ($copy.Count -ne 1) {throw 'Backup file was not published'}
     $cipher = [IO.File]::ReadAllBytes($copy[0].FullName)

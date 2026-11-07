@@ -1,13 +1,19 @@
-param([string]$Server = 'root@80.47.238.200', [string]$Destination = 'D:\VeiruneBackups')
+param([string]$Server = 'root@80.47.238.200', [string]$Destination = 'D:\VeiruneBackups', [switch]$Offline)
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\backup-common.ps1"
 if ($Server -notmatch '^[a-z_][a-z0-9_-]*@[a-z0-9][a-z0-9.-]+$') {throw 'Invalid SSH destination'}
 $destinationPath = [IO.Path]::GetFullPath($Destination)
 Set-VeirunePrivateDirectory $destinationPath
+if (-not $Offline -and (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'backup-target.py'))) {
+    $resolved=& python (Join-Path $PSScriptRoot 'backup-target.py') --server $Server --cache (Join-Path $destinationPath 'service-endpoint.json')
+    if ($LASTEXITCODE -eq 0 -and $resolved -match '^[a-z_][a-z0-9_-]*@[a-z0-9][a-z0-9.-]+$') {$Server=$resolved}
+}
 $temporary = Join-Path ([IO.Path]::GetTempPath()) ('veirune-backup-' + [guid]::NewGuid().ToString('N'))
 Set-VeirunePrivateDirectory $temporary
 try {
-    $raw = & ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 $Server 'python3 /root/fastcloud-backend/tools/export_backup.py'
+    $exportCommand='python3 /root/fastcloud-backend/tools/export_backup.py'
+    if ($Offline) {$exportCommand+=' --offline'}
+    $raw = & ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 $Server $exportCommand
     if ($LASTEXITCODE -ne 0) {throw 'Could not create the remote backup. Check SSH and the deployed backend.'}
     $report = ($raw -join "`n") | ConvertFrom-Json
     if ($report.file -notmatch '^veirune-\d{8}T\d{6}Z-[a-f0-9]{8}\.zip$' -or $report.sha256 -notmatch '^[a-f0-9]{64}$') {throw 'Invalid backup response'}
@@ -41,6 +47,8 @@ try {
         }
     }
     [ordered]@{savedAt=[DateTime]::UtcNow.ToString('o');file=$name;server=$Server;retained=$kept;counts=$manifest.counts} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $destinationPath 'last-success.json') -Encoding UTF8
+    $oldError=Join-Path $destinationPath 'last-error.txt'
+    if(Test-Path -LiteralPath $oldError){Remove-Item -LiteralPath $oldError}
     Write-Output "Backup saved and restored successfully: $target"
 } catch {
     Set-Content -LiteralPath (Join-Path $destinationPath 'last-error.txt') -Value ([DateTime]::UtcNow.ToString('o') + ' Backup failed; check SSH, backend health and Python availability.') -Encoding UTF8
