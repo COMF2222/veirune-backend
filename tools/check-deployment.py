@@ -7,7 +7,7 @@ import urllib.error
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--url', default='https://80.47.238.200')
+    parser.add_argument('--url', default='https://89.125.126.32')
     args = parser.parse_args()
     origin = args.url.rstrip('/')
     if not origin.startswith('https://'): raise ValueError('HTTPS is required')

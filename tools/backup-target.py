@@ -10,7 +10,7 @@ import urllib.request
 
 def target(server, announcement):
     previous='https://'+server.split('@',1)[1]
-    if previous not in ['https://80.47.238.200','https://77.223.107.226',announcement['origin'],*announcement.get('previous',[])]:return server
+    if previous not in ['https://89.125.126.32','https://80.47.238.200','https://77.223.107.226',announcement['origin'],*announcement.get('previous',[])]:return server
     host=urllib.parse.urlsplit(announcement['origin']).hostname
     if not host or not re.fullmatch(r'[a-z0-9][a-z0-9.-]+',host):return server
     return server.split('@',1)[0]+'@'+host
@@ -27,7 +27,7 @@ def main():
         try:old=verified(json.loads(args.cache.read_text()),public) if args.cache.exists() else None
         except Exception:old=None
         if old:selected=target(selected,old)
-        request=urllib.request.Request('https://fastcloud.comf.workers.dev/service.json',headers={'Cache-Control':'no-cache'})
+        request=urllib.request.Request('https://veirune.comf.workers.dev/service.json',headers={'Cache-Control':'no-cache'})
         try:
             with urllib.request.urlopen(request,timeout=4) as response:
                 raw=response.read(8193)

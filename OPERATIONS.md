@@ -116,11 +116,11 @@ Alerts are shown in the owner panel, not sent to email or chat. Check backup sta
 
 ### Replacement VPS and Windows offsite copies
 
-The replacement host is `root@80.47.238.200`; keep its checkout at
+The replacement host is `root@89.125.126.32`; keep its checkout at
 `/root/fastcloud-backend` so the backup export command has a stable path.
 It uses `compose.ip.yaml` without the VPN overlay. On a fresh Ubuntu host, run
 `bash tools/bootstrap-ubuntu.sh`, then
-`python3 tools/configure_server.py --ip 80.47.238.200` to enter the same SoundCloud
+`python3 tools/configure_server.py --ip 89.125.126.32` to enter the same SoundCloud
 API application's credentials and the owner's profile URL privately.
 The configuration reserves 5 GiB of free disk and allows 20 GiB of media cache.
 Run `bash deploy_checked.sh -f compose.ip.yaml`, then

@@ -1,4 +1,4 @@
-param([string]$Server = 'root@80.47.238.200', [string]$Destination = 'D:\VeiruneBackups', [switch]$Offline)
+param([string]$Server = 'root@89.125.126.32', [string]$Destination = 'D:\VeiruneBackups', [switch]$Offline)
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\backup-common.ps1"
 if ($Server -notmatch '^[a-z_][a-z0-9_-]*@[a-z0-9][a-z0-9.-]+$') {throw 'Invalid SSH destination'}

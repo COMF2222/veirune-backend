@@ -1,4 +1,4 @@
-param([string]$Server = 'root@80.47.238.200')
+param([string]$Server = 'root@89.125.126.32')
 $ErrorActionPreference = 'Stop'
 if ($Server -notmatch '^root@([0-9]{1,3}\.){3}[0-9]{1,3}$') {throw 'Use root@public-ip'}
 $origin = 'https://' + $Server.Split('@')[1]

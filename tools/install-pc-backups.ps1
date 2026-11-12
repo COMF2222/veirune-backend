@@ -1,4 +1,4 @@
-param([string]$Server = 'root@80.47.238.200', [string]$Destination = 'D:\VeiruneBackups')
+param([string]$Server = 'root@89.125.126.32', [string]$Destination = 'D:\VeiruneBackups')
 $ErrorActionPreference = 'Stop'
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {throw 'Python is required for database restore validation'}
 & "$PSScriptRoot\backup-to-pc.ps1" -Server $Server -Destination $Destination

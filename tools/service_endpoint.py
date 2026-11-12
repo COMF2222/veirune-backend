@@ -92,7 +92,7 @@ def main():
     if health.get('status')!='ok' or not config.get('client_id'):raise ValueError('New backend is not ready')
     path=args.website/'service.json'
     old=verified(json.loads(path.read_text()),public) if path.exists() else None
-    previous=list(dict.fromkeys((old.get('previous',[])+[old['origin']]) if old else ['https://80.47.238.200']))
+    previous=list(dict.fromkeys((old.get('previous',[])+[old['origin']]) if old else ['https://89.125.126.32']))
     value=signed(key,target,(old['serial']+1) if old else 1,previous)
     temporary=path.with_suffix('.json.part');temporary.write_text(json.dumps(value,indent=2)+'\n',encoding='ascii');os.replace(temporary,path)
     (args.website/'backend-origin.js').write_text('export const backendOrigin = '+json.dumps(target)+';\n',encoding='ascii')
